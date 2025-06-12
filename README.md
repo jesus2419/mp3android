@@ -7,11 +7,6 @@
 
 Una moderna aplicación reproductor de música para Android, desarrollada con las últimas tecnologías de Android Jetpack.
 
-<div align="center">
-  <img src="https://via.placeholder.com/300x600/4285F4/FFFFFF?text=Player+Screen" width="30%" alt="Player Screen"/>
-  <img src="https://via.placeholder.com/300x600/0095D5/FFFFFF?text=Playlists" width="30%" alt="Playlist Screen"/>
-  <img src="https://via.placeholder.com/300x600/3DDC84/FFFFFF?text=Dark+Mode" width="30%" alt="Dark Mode"/>
-</div>
 
 ## ✨ Características
 
