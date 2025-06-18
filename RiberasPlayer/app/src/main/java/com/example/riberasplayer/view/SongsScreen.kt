@@ -12,6 +12,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,8 +28,9 @@ import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import java.io.File
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SongsScreen(
     onSongSelected: (File) -> Unit = {},
@@ -127,17 +130,67 @@ fun SongsScreen(
         }
     }
 
-    // Muestra el reproductor cuando hay una canción seleccionada
+    // Estado para controlar la hoja modal (bottom sheet)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var showPlayerSheet by remember { mutableStateOf(false) }
+
+    // Mostrar el reproductor como hoja modal cuando hay canción seleccionada
     val currentSong by viewModel.currentSong.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
 
-    if (currentSong != null) {
-        MiniPlayer(
-            song = currentSong!!,
-            isPlaying = isPlaying,
-            onPlayPause = { viewModel.togglePlayPause() },
-            onStop = { viewModel.stop() }
-        )
+    // Mostrar el reproductor automáticamente al seleccionar canción
+    LaunchedEffect(currentSong) {
+        if (currentSong != null) {
+            showPlayerSheet = true
+        }
+    }
+
+    if (currentSong != null && showPlayerSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showPlayerSheet = false },
+            sheetState = sheetState,
+            dragHandle = null
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+            ) {
+                MiniPlayer(
+                    song = currentSong!!,
+                    isPlaying = isPlaying,
+                    onPlayPause = { viewModel.togglePlayPause() },
+                    onStop = {
+                        viewModel.stop()
+                        showPlayerSheet = false
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                )
+            }
+        }
+    }
+
+    // Burbuja flotante cuando hay canción y el reproductor está cerrado
+    if (currentSong != null && !showPlayerSheet) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+        ) {
+            FloatingActionButton(
+                onClick = { showPlayerSheet = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "Abrir reproductor"
+                )
+            }
+        }
     }
 }
 

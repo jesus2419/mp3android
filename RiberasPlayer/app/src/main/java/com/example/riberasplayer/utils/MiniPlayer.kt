@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
@@ -62,11 +63,13 @@ fun MiniPlayer(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp), // Más padding horizontal
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
-            modifier = Modifier.padding(8.dp)
+            modifier = Modifier
+                .padding(12.dp)
+                .wrapContentHeight() // Solo ocupa el alto necesario
         ) {
             // Barra de progreso
             Row(
@@ -125,6 +128,12 @@ fun MiniPlayer(
                     Icon(
                         imageVector = if (isPlaying) Icons.Filled.Clear else Icons.Filled.PlayArrow,
                         contentDescription = if (isPlaying) "Pausar" else "Reproducir"
+                    )
+                }
+                IconButton(onClick = onStop) {
+                    Icon(
+                        imageVector = Icons.Filled.Clear,
+                        contentDescription = "Cerrar"
                     )
                 }
             }
