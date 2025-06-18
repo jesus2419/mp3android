@@ -1,88 +1,62 @@
 package com.example.riberasplayer.view
 
-// SongsScreen.kt
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import com.example.riberasplayer.model.Song
-import com.example.riberasplayer.ui.theme.MusicPlayerTheme
-
 import android.Manifest
 import android.content.Context
-import android.os.Environment
-import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberPermissionState
-import java.io.File
-
 import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
-
-
-private fun formatDuration(millis: Long?): String {
-    if (millis == null) return "--:--"
-    val seconds = (millis / 1000) % 60
-    val minutes = (millis / (1000 * 60)) % 60
-    return String.format("%02d:%02d", minutes, seconds)
-}
+import com.google.accompanist.permissions.rememberPermissionState
+import java.io.File
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun SongsScreen(
     onSongSelected: (File) -> Unit = {}
 ) {
-
     val context = LocalContext.current
-    val storagePermission = rememberPermissionState(
-        permission = Manifest.permission.READ_EXTERNAL_STORAGE
-    )
-    // Versión actualizada del estado de permisos
-    val permissionState = rememberPermissionState(
-        permission = Manifest.permission.READ_EXTERNAL_STORAGE
-    )
 
-    // Estado para la lista de canciones
+    // Seleccionar el permiso correcto según la versión de Android
+    val permission = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> Manifest.permission.READ_MEDIA_AUDIO
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> Manifest.permission.READ_MEDIA_AUDIO
+        else -> Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+
+    val permissionState = rememberPermissionState(permission = permission)
     var songs by remember { mutableStateOf<List<SongFile>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-
     LaunchedEffect(permissionState.status) {
         if (permissionState.status.isGranted) {
-            isLoading = true
-            errorMessage = null
-            try {
-                songs = loadAudioFiles(context)
-            } catch (e: Exception) {
-                errorMessage = "Error al cargar canciones: ${e.message}"
-            } finally {
-                isLoading = false
-            }
+            loadSongs(context, onSuccess = { loadedSongs ->
+                songs = loadedSongs
+            }, onError = { error ->
+                errorMessage = error
+            })
         }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Solicitar permiso si no está concedido
         if (!permissionState.status.isGranted) {
             PermissionRequest(
-                permissionState = storagePermission,
+                permissionState = permissionState,
                 rationale = "Necesitamos acceso a tus archivos de audio para mostrar tus canciones",
                 onPermissionDenied = { errorMessage = "Permiso denegado" }
             )
@@ -90,30 +64,38 @@ fun SongsScreen(
 
         Text(
             text = "Todas las canciones",
-            modifier = Modifier.padding(16.dp),
-            style = MaterialTheme.typography.titleLarge
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(16.dp)
         )
 
         when {
             isLoading -> {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                CircularProgressIndicator(modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(16.dp))
             }
             errorMessage != null -> {
-                Text(
-                    text = errorMessage!!,
-                    color = MaterialTheme.colorScheme.error,
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(16.dp)
-                )
-                Button(
-                    onClick = {
+                ) {
+                    Text(
+                        text = errorMessage!!,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = {
                         errorMessage = null
                         if (permissionState.status.isGranted) {
-                            songs = loadAudioFiles(context)
+                            loadSongs(context, onSuccess = { loadedSongs ->
+                                songs = loadedSongs
+                            }, onError = { error ->
+                                errorMessage = error
+                            })
                         }
-                    },
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) {
-                    Text("Reintentar")
+                    }) {
+                        Text("Reintentar")
+                    }
                 }
             }
             songs.isEmpty() -> {
@@ -139,7 +121,161 @@ fun SongsScreen(
     }
 }
 
-// Modelo para archivos de audio
+private fun loadSongs(
+    context: Context,
+    onSuccess: (List<SongFile>) -> Unit,
+    onError: (String) -> Unit
+) {
+    try {
+        val songs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            loadAudioFilesWithMediaStore(context)
+        } else {
+            loadAudioFilesLegacy(context)
+        }
+        onSuccess(songs)
+    } catch (e: Exception) {
+        onError("Error al cargar canciones: ${e.message ?: "Error desconocido"}")
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun loadAudioFilesLegacy(context: Context): List<SongFile> {
+    val audioFiles = mutableListOf<SongFile>()
+
+    // Directorios comunes donde buscar música
+    val directoriesToScan = mutableListOf<File>()
+
+    // Directorio de música estándar
+    directoriesToScan.add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC))
+
+    // Directorios externos de la app
+    context.getExternalFilesDirs(null).forEach { dir ->
+        dir?.let { directoriesToScan.add(it) }
+    }
+
+    // Almacenamiento interno
+    directoriesToScan.add(context.getExternalFilesDir(null) ?: context.filesDir)
+
+    // Escanear directorios
+    directoriesToScan.forEach { dir ->
+        if (dir.exists() && dir.canRead()) {
+            scanDirectoryForAudio(dir, audioFiles)
+        }
+    }
+
+    return audioFiles.sortedBy { it.title }
+}
+
+@RequiresApi(Build.VERSION_CODES.Q)
+private fun loadAudioFilesWithMediaStore(context: Context): List<SongFile> {
+    val audioFiles = mutableListOf<SongFile>()
+    val collection = MediaStore.Audio.Media.getContentUri(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.VOLUME_EXTERNAL
+        } else {
+            MediaStore.VOLUME_EXTERNAL_PRIMARY
+        }
+    )
+
+    val projection = arrayOf(
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.DISPLAY_NAME,
+        MediaStore.Audio.Media.ARTIST,
+        MediaStore.Audio.Media.DURATION,
+        MediaStore.Audio.Media.DATA,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.ALBUM
+    )
+
+    val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+
+    context.contentResolver.query(
+        collection,
+        projection,
+        selection,
+        null,
+        "${MediaStore.Audio.Media.TITLE} ASC"
+    )?.use { cursor ->
+        val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+        val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+        val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+        val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+        val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+
+        while (cursor.moveToNext()) {
+            val path = cursor.getString(pathColumn)
+            if (path != null && path.endsWith(".mp3", ignoreCase = true)) {
+                val file = File(path)
+                if (file.exists()) {
+                    val title = cursor.getString(titleColumn) ?: file.nameWithoutExtension
+                    val artist = cursor.getString(artistColumn) ?: "Artista desconocido"
+                    val duration = cursor.getLong(durationColumn)
+
+                    audioFiles.add(
+                        SongFile(
+                            file = file,
+                            title = title,
+                            artist = artist,
+                            duration = formatDuration(duration)
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    return audioFiles
+}
+
+private fun scanDirectoryForAudio(directory: File, audioFiles: MutableList<SongFile>) {
+    try {
+        directory.walk()
+            .maxDepth(10)
+            .filter { it.isFile && it.extension.equals("mp3", ignoreCase = true) }
+            .forEach { file ->
+                val metadata = getAudioMetadata(file)
+                audioFiles.add(
+                    SongFile(
+                        file = file,
+                        title = metadata.title ?: file.nameWithoutExtension,
+                        artist = metadata.artist ?: "Artista desconocido",
+                        duration = metadata.duration ?: "--:--"
+                    )
+                )
+            }
+    } catch (e: SecurityException) {
+        // No tenemos permisos para este directorio
+    }
+}
+
+private fun getAudioMetadata(file: File): AudioMetadata {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(file.absolutePath)
+        AudioMetadata(
+            title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
+            artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
+            duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+                ?.let { formatDuration(it) }
+        )
+    } catch (e: Exception) {
+        AudioMetadata(
+            title = file.nameWithoutExtension,
+            artist = "Artista desconocido",
+            duration = "--:--"
+        )
+    } finally {
+        retriever.release()
+    }
+}
+
+private fun formatDuration(millis: Long): String {
+    val seconds = (millis / 1000) % 60
+    val minutes = (millis / (1000 * 60)) % 60
+    return String.format("%02d:%02d", minutes, seconds)
+}
+
 data class SongFile(
     val file: File,
     val title: String,
@@ -147,30 +283,12 @@ data class SongFile(
     val duration: String
 )
 
-// Componente para ítem de canción
-@Composable
-fun SongFileItem(
-    song: SongFile,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp)
-            .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = song.title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = "${song.artist} • ${song.duration}",
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
-}
+data class AudioMetadata(
+    val title: String?,
+    val artist: String?,
+    val duration: String?
+)
 
-// Componente para solicitud de permiso
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun PermissionRequest(
@@ -186,92 +304,37 @@ fun PermissionRequest(
             text = rationale,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        Button(onClick = { permissionState.launchPermissionRequest() }) {
+        Button(onClick = {
+            permissionState.launchPermissionRequest()
+        }) {
             Text("Conceder permiso")
         }
     }
 }
 
-// Función para cargar archivos de audio
-fun loadAudioFiles(context: Context): List<SongFile> {
-    val audioFiles = mutableListOf<SongFile>()
-    val externalDirs = context.getExternalFilesDirs(null)
-
-    externalDirs.forEach { dir ->
-        dir?.let {
-            scanDirectoryForAudio(it, audioFiles)
-        }
-    }
-
-    // También escanear el almacenamiento externo primario
-    Environment.getExternalStorageDirectory()?.let {
-        scanDirectoryForAudio(it, audioFiles)
-    }
-
-    return audioFiles
-}
-
-private fun scanDirectoryForAudio(directory: File, audioFiles: MutableList<SongFile>) {
-    directory.walk().maxDepth(10).forEach { file ->
-        if (file.isFile && file.extension.equals("mp3", ignoreCase = true)) {
-            val metadata = getAudioMetadata(file)
-            audioFiles.add(
-                SongFile(
-                    file = file,
-                    title = metadata.title ?: file.nameWithoutExtension,
-                    artist = metadata.artist ?: "Artista desconocido",
-                    duration = metadata.duration ?: "--:--"
-                )
-            )
-        }
-    }
-}
-
-// Estructura para metadatos
-data class AudioMetadata(
-    val title: String?,
-    val artist: String?,
-    val duration: String?
-)
-
-// Función para obtener metadatos (simplificada)
-private fun getAudioMetadata(file: File): AudioMetadata {
-    // En una implementación real usarías MediaMetadataRetriever
-    return AudioMetadata(
-        title = file.nameWithoutExtension,
-        artist = null,
-        duration = null
-    )
-}
-
-private fun getAudioMetadata2(file: File): AudioMetadata {
-    val retriever = MediaMetadataRetriever()
-    return try {
-        retriever.setDataSource(file.absolutePath)
-        AudioMetadata(
-            title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-                ?: file.nameWithoutExtension,
-            artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
-                ?: "Artista desconocido",
-            duration = formatDuration(
-                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-            )
-        )
-    } catch (e: Exception) {
-        AudioMetadata(
-            title = file.nameWithoutExtension,
-            artist = "Artista desconocido",
-            duration = "--:--"
-        )
-    } finally {
-        retriever.release()
-    }
-}
-
-@Preview
 @Composable
-fun SongsScreenPreview() {
-    MusicPlayerTheme {
-        SongsScreen()
+fun SongFileItem(
+    song: SongFile,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "${song.artist} • ${song.duration}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
     }
 }

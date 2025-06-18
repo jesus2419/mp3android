@@ -1,6 +1,8 @@
 package com.example.riberasplayer
 
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -32,4 +34,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+
+fun isAndroid10OrAbove(): Boolean {
+    val isAndroid10OrAbove = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+    Log.d("VERSION_CHECK", "¿Es Android 10 o superior? $isAndroid10OrAbove")
+    return isAndroid10OrAbove
 }
