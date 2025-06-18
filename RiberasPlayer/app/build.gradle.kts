@@ -60,6 +60,12 @@ dependencies {
     implementation ("androidx.media3:media3-exoplayer:1.2.1")
     implementation ("androidx.media3:media3-session:1.2.1")
 
+    // Para manejo de permisos
+    implementation ("com.google.accompanist:accompanist-permissions:0.34.0")
+
+    // Para leer metadatos de audio (opcional)
+    implementation ("androidx.media:media:1.7.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
