@@ -18,6 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.riberasplayer.utils.MiniPlayer
+import com.example.riberasplayer.viewmodel.PlayerViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
@@ -27,7 +30,8 @@ import java.io.File
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun SongsScreen(
-    onSongSelected: (File) -> Unit = {}
+    onSongSelected: (File) -> Unit = {},
+    viewModel: PlayerViewModel = viewModel()
 ) {
     val context = LocalContext.current
 
@@ -112,12 +116,28 @@ fun SongsScreen(
                     items(songs) { song ->
                         SongFileItem(
                             song = song,
-                            onClick = { onSongSelected(song.file) }
+                            onClick = {
+                                viewModel.playSong(song)
+                                //onSongSelected(song) // Opcional: navegación si es necesaria
+                            }
                         )
                     }
                 }
             }
         }
+    }
+
+    // Muestra el reproductor cuando hay una canción seleccionada
+    val currentSong by viewModel.currentSong.collectAsState()
+    val isPlaying by viewModel.isPlaying.collectAsState()
+
+    if (currentSong != null) {
+        MiniPlayer(
+            song = currentSong!!,
+            isPlaying = isPlaying,
+            onPlayPause = { viewModel.togglePlayPause() },
+            onStop = { viewModel.stop() }
+        )
     }
 }
 
