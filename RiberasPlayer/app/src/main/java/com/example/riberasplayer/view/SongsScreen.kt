@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.riberasplayer.utils.MiniPlayer
 import com.example.riberasplayer.viewmodel.PlayerViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
@@ -34,7 +33,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SongsScreen(
     onSongSelected: (File) -> Unit = {},
-    viewModel: PlayerViewModel = viewModel()
+    viewModel: PlayerViewModel // Ahora siempre se pasa el viewModel
 ) {
     val context = LocalContext.current
 
@@ -54,6 +53,7 @@ fun SongsScreen(
         if (permissionState.status.isGranted) {
             loadSongs(context, onSuccess = { loadedSongs ->
                 songs = loadedSongs
+                viewModel.setSongList(loadedSongs) // <-- Agrega esto
             }, onError = { error ->
                 errorMessage = error
             })
@@ -120,6 +120,7 @@ fun SongsScreen(
                         SongFileItem(
                             song = song,
                             onClick = {
+                                viewModel.setSongList(songs) // <-- Asegura la lista actual
                                 viewModel.playSong(song)
                                 //onSongSelected(song) // Opcional: navegación si es necesaria
                             }
@@ -130,68 +131,9 @@ fun SongsScreen(
         }
     }
 
-    // Estado para controlar la hoja modal (bottom sheet)
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
-    var showPlayerSheet by remember { mutableStateOf(false) }
-
-    // Mostrar el reproductor como hoja modal cuando hay canción seleccionada
-    val currentSong by viewModel.currentSong.collectAsState()
-    val isPlaying by viewModel.isPlaying.collectAsState()
-
-    // Mostrar el reproductor automáticamente al seleccionar canción
-    LaunchedEffect(currentSong) {
-        if (currentSong != null) {
-            showPlayerSheet = true
-        }
-    }
-
-    if (currentSong != null && showPlayerSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showPlayerSheet = false },
-            sheetState = sheetState,
-            dragHandle = null
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-            ) {
-                MiniPlayer(
-                    song = currentSong!!,
-                    isPlaying = isPlaying,
-                    onPlayPause = { viewModel.togglePlayPause() },
-                    onStop = {
-                        viewModel.stop()
-                        showPlayerSheet = false
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                )
-            }
-        }
-    }
-
-    // Burbuja flotante cuando hay canción y el reproductor está cerrado
-    if (currentSong != null && !showPlayerSheet) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-        ) {
-            FloatingActionButton(
-                onClick = { showPlayerSheet = true },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = "Abrir reproductor"
-                )
-            }
-        }
-    }
+    // Eliminar todo lo relacionado con ModalBottomSheet y MiniPlayer aquí
+    // Ya no se necesita el estado sheetState, showPlayerSheet, ni el FloatingActionButton
+    // El MiniPlayer se muestra globalmente en MusicPlayerApp
 }
 
 private fun loadSongs(

@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.PlayArrow
+
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -21,14 +24,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.riberasplayer.view.SongFile
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun MiniPlayer(
@@ -36,11 +43,25 @@ fun MiniPlayer(
     isPlaying: Boolean,
     onPlayPause: () -> Unit,
     onStop: () -> Unit,
+    onSeekTo: (Int) -> Unit,
+    currentPosition: Int,
+    durationMs: Int,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Estado para el progreso de reproducción
-    var currentPosition by remember { mutableIntStateOf(0) }
-    val duration = remember { mutableIntStateOf(0) }
+    var sliderPosition by remember { mutableIntStateOf(currentPosition) }
+    var isUserSeeking by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    var backPressCount by remember { mutableStateOf(0) }
+    var backPressJob by remember { mutableStateOf<Job?>(null) }
+
+    // Actualiza el slider cuando cambia la posición real, solo si el usuario no está deslizando
+    LaunchedEffect(currentPosition) {
+        if (!isUserSeeking) {
+            sliderPosition = currentPosition
+        }
+    }
 
     // Convertir milisegundos a formato mm:ss
     fun formatTime(millis: Int): String {
@@ -49,27 +70,16 @@ fun MiniPlayer(
         return String.format("%02d:%02d", minutes, seconds)
     }
 
-    // Actualizar progreso mientras se reproduce
-    LaunchedEffect(isPlaying) {
-        if (isPlaying) {
-            while (isPlaying) {
-                delay(1000) // Actualizar cada segundo
-                currentPosition += 1000 // Incrementar 1 segundo (simulado)
-                // En una implementación real, obtendrías esto del MediaPlayer
-            }
-        }
-    }
-
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp), // Más padding horizontal
+            .padding(horizontal = 16.dp, vertical = 2.dp), // Menos padding inferior
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
             modifier = Modifier
                 .padding(12.dp)
-                .wrapContentHeight() // Solo ocupa el alto necesario
+                .wrapContentHeight()
         ) {
             // Barra de progreso
             Row(
@@ -78,23 +88,30 @@ fun MiniPlayer(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = formatTime(currentPosition),
+                    text = formatTime(sliderPosition),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
 
                 Slider(
-                    value = currentPosition.toFloat(),
+                    value = sliderPosition.toFloat(),
                     onValueChange = { newValue ->
-                        currentPosition = newValue.toInt()
-                        // Aquí deberías actualizar la posición en el MediaPlayer
+                        isUserSeeking = true
+                        sliderPosition = newValue.toInt()
+                        onSeekTo(sliderPosition) // Actualiza en tiempo real al deslizar
                     },
-                    valueRange = 0f..duration.value.toFloat(),
-                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                    onValueChangeFinished = {
+                        isUserSeeking = false
+                        // Ya se actualizó en tiempo real, no es necesario llamar de nuevo
+                    },
+                    valueRange = 0f..durationMs.toFloat(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
                 )
 
                 Text(
-                    text = song.duration,
+                    text = formatTime(durationMs),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
@@ -124,10 +141,36 @@ fun MiniPlayer(
                     )
                 }
 
+                IconButton(onClick = {
+                    backPressCount++
+                    backPressJob?.cancel()
+                    backPressJob = coroutineScope.launch {
+                        delay(300)
+                        if (backPressCount == 1) {
+                            // Un solo tap: reinicia la canción
+                            onSeekTo(0)
+                        } else if (backPressCount >= 2) {
+                            // Doble tap: retrocede de canción
+                            onPrevious()
+                        }
+                        backPressCount = 0
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Anterior"
+                    )
+                }
                 IconButton(onClick = onPlayPause) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Filled.Clear else Icons.Filled.PlayArrow,
                         contentDescription = if (isPlaying) "Pausar" else "Reproducir"
+                    )
+                }
+                IconButton(onClick = onNext) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowForward,
+                        contentDescription = "Siguiente"
                     )
                 }
                 IconButton(onClick = onStop) {
