@@ -19,9 +19,9 @@ import com.example.riberasplayer.ui.theme.MusicPlayerTheme
 @Composable
 fun PlaylistScreen() {
     val playlists = listOf(
-        Playlist("Favoritas", "15 canciones"),
-        Playlist("Trabajo", "8 canciones"),
-        Playlist("Viaje", "12 canciones")
+        Playlist(1, "Favoritas", "15 canciones"),
+        Playlist(2,"Trabajo", "8 canciones"),
+        Playlist(3,"Viaje", "12 canciones")
     )
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -38,7 +38,7 @@ fun PlaylistScreen() {
 fun PlaylistItem(playlist: Playlist) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Text(text = playlist.name, style = MaterialTheme.typography.titleMedium)
-        Text(text = playlist.songCount, style = MaterialTheme.typography.bodySmall)
+        //Text(text = playlist.songCount, style = MaterialTheme.typography.bodySmall)
     }
 }
 
