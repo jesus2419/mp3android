@@ -190,7 +190,10 @@ open class PlayerViewModel : ViewModel() {
             ctx, 3, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // IMPORTANTE: Usa un ícono válido y pequeño para notificaciones (PNG en drawable)
+        // Calcula progreso y duración en ms
+        val progress = _currentPosition.value
+        val max = _durationMs.value.takeIf { it > 0 } ?: 1
+
         val builder = NotificationCompat.Builder(ctx, CHANNEL_ID)
             .setContentTitle(song.title)
             .setContentText(song.artist)
@@ -198,7 +201,7 @@ open class PlayerViewModel : ViewModel() {
             .setOnlyAlertOnce(true)
             .setOngoing(isPlaying)
             .setAutoCancel(false)
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Usa PRIORITY_HIGH para asegurar visibilidad
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .addAction(R.drawable.back, "Anterior", prevPendingIntent)
             .addAction(
                 if (isPlaying) R.drawable.pause else R.drawable.play,
@@ -210,8 +213,9 @@ open class PlayerViewModel : ViewModel() {
             .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
                 .setShowActionsInCompactView(0, 1, 2)
             )
+            // Barra de progreso igual a la del MiniPlayer
+            .setProgress(max, progress, false) // <-- Esto muestra la barra de progreso
 
-        // Notifica usando el contexto de la app
         notificationManager?.notify(NOTIFICATION_ID, builder.build())
     }
 
