@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,9 +19,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.riberasplayer.R
 import com.example.riberasplayer.viewmodel.PlayerViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
@@ -60,71 +65,85 @@ fun SongsScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (!permissionState.status.isGranted) {
-            PermissionRequest(
-                permissionState = permissionState,
-                rationale = "Necesitamos acceso a tus archivos de audio para mostrar tus canciones",
-                onPermissionDenied = { errorMessage = "Permiso denegado" }
-            )
-        }
-
-        Text(
-            text = "Todas las canciones",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(16.dp)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Imagen de fondo
+        Image(
+            painter = painterResource(id = R.drawable.fondo), // Cambia por tu nombre real
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
         )
 
-        when {
-            isLoading -> {
-                CircularProgressIndicator(modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(16.dp))
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (!permissionState.status.isGranted) {
+                PermissionRequest(
+                    permissionState = permissionState,
+                    rationale = "Necesitamos acceso a tus archivos de audio para mostrar tus canciones",
+                    onPermissionDenied = { errorMessage = "Permiso denegado" }
+                )
             }
-            errorMessage != null -> {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = {
-                        errorMessage = null
-                        if (permissionState.status.isGranted) {
-                            loadSongs(context, onSuccess = { loadedSongs ->
-                                songs = loadedSongs
+
+            Text(
+                text = "Todas las canciones",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(16.dp)
+            )
+
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(16.dp))
+                }
+                errorMessage != null -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = {
+                            errorMessage = null
+                            if (permissionState.status.isGranted) {
+                                loadSongs(context, onSuccess = { loadedSongs ->
+                                    songs = loadedSongs
                             }, onError = { error ->
                                 errorMessage = error
                             })
+                            }
+                        }) {
+                            Text("Reintentar")
                         }
-                    }) {
-                        Text("Reintentar")
                     }
                 }
-            }
-            songs.isEmpty() -> {
-                Text(
-                    text = if (permissionState.status.isGranted)
-                        "No se encontraron canciones"
-                    else
-                        "Permiso no concedido",
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-            else -> {
-                LazyColumn {
-                    items(songs) { song ->
-                        SongFileItem(
-                            song = song,
-                            onClick = {
-                                viewModel.setSongList(songs) // <-- Asegura la lista actual
-                                viewModel.playSong(song)
-                                //onSongSelected(song) // Opcional: navegación si es necesaria
-                            }
-                        )
+                songs.isEmpty() -> {
+                    Text(
+                        text = if (permissionState.status.isGranted)
+                            "No se encontraron canciones"
+                        else
+                            "Permiso no concedido",
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+                else -> {
+                    // Hacer la lista scrolleable usando weight
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                    ) {
+                        items(songs) { song ->
+                            SongFileItem(
+                                song = song,
+                                onClick = {
+                                    viewModel.setSongList(songs) // <-- Asegura la lista actual
+                                    viewModel.playSong(song)
+                                    //onSongSelected(song) // Opcional: navegación si es necesaria
+                                }
+                            )
+                        }
                     }
                 }
             }

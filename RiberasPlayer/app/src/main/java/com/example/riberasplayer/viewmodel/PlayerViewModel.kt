@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class PlayerViewModel : ViewModel() {
+open class PlayerViewModel : ViewModel() {
     private val _currentSong = MutableStateFlow<SongFile?>(null)
     private val _isPlaying = MutableStateFlow(false)
     private var mediaPlayer: MediaPlayer? = null
