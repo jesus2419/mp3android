@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,8 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.riberasplayer.R
 import com.example.riberasplayer.viewmodel.PlayerViewModel
@@ -65,6 +69,10 @@ fun SongsScreen(
         }
     }
 
+    // Estado para mostrar el nombre de la canción seleccionada en el menú
+    var selectedSongName by remember { mutableStateOf<String?>(null) }
+    var showSongNameDialog by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Imagen de fondo
         Image(
@@ -88,6 +96,37 @@ fun SongsScreen(
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(16.dp)
             )
+
+            // Mostrar el nombre de la canción seleccionada si corresponde
+            if (showSongNameDialog && selectedSongName != null) {
+                Dialog(onDismissRequest = { showSongNameDialog = false }) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        tonalElevation = 8.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Canción seleccionada:",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = selectedSongName ?: "",
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = { showSongNameDialog = false }) {
+                                Text("Cerrar")
+                            }
+                        }
+                    }
+                }
+            }
 
             when {
                 isLoading -> {
@@ -141,6 +180,10 @@ fun SongsScreen(
                                     viewModel.setSongList(songs) // <-- Asegura la lista actual
                                     viewModel.playSong(song)
                                     //onSongSelected(song) // Opcional: navegación si es necesaria
+                                },
+                                onOptionsClick = {
+                                    selectedSongName = song.title
+                                    showSongNameDialog = true
                                 }
                             )
                         }
@@ -349,8 +392,11 @@ fun PermissionRequest(
 @Composable
 fun SongFileItem(
     song: SongFile,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onOptionsClick: () -> Unit
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -358,17 +404,60 @@ fun SongFileItem(
             .clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${song.artist} • ${song.duration}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = song.title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${song.artist} • ${song.duration}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            Box {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = "Opciones"
+                    )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Cambiar nombre") },
+                        onClick = {
+                            expanded = false
+                            onOptionsClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Cambiar artista") },
+                        onClick = {
+                            expanded = false
+                            onOptionsClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Agregar a playlist") },
+                        onClick = {
+                            expanded = false
+                            onOptionsClick()
+                        }
+                    )
+                }
+            }
         }
     }
 }
