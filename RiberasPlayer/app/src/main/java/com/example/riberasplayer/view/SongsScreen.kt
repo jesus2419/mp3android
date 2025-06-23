@@ -39,12 +39,16 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import java.io.File
 import kotlinx.coroutines.launch
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
+import com.example.riberasplayer.model.Playlist
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SongsScreen(
     onSongSelected: (File) -> Unit = {},
-    viewModel: PlayerViewModel // Ahora siempre se pasa el viewModel
+    viewModel: PlayerViewModel,
+    navController: NavController = rememberNavController() // Añade NavController para navegación
 ) {
     val context = LocalContext.current
     val dbHandler = remember { MusicDatabaseHandler(context) }
@@ -82,6 +86,11 @@ fun SongsScreen(
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var showEditArtistDialog by remember { mutableStateOf(false) }
     var showSongNameDialog by remember { mutableStateOf(false) }
+
+    // Estado para mostrar el diálogo de selección de playlist
+    var showPlaylistDialog by remember { mutableStateOf(false) }
+    var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
+    var songToAdd by remember { mutableStateOf<Song?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Imagen de fondo
@@ -218,6 +227,40 @@ fun SongsScreen(
                 }
             }
 
+            // Diálogo para seleccionar playlist
+            if (showPlaylistDialog && songToAdd != null) {
+                playlists = dbHandler.getAllPlaylists()
+                AlertDialog(
+                    onDismissRequest = { showPlaylistDialog = false },
+                    title = { Text("Agregar a playlist") },
+                    text = {
+                        if (playlists.isEmpty()) {
+                            Text("No hay playlists. Crea una primero.")
+                        } else {
+                            Column {
+                                playlists.forEach { playlist ->
+                                    TextButton(
+                                        onClick = {
+                                            dbHandler.addSongToPlaylist(playlist.id, songToAdd!!.id)
+                                            showPlaylistDialog = false
+                                            // Navega a la pantalla de canciones de la playlist
+                                            navController.navigate("playlist_songs/${playlist.id}")
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(playlist.name)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = {
+                        TextButton(onClick = { showPlaylistDialog = false }) { Text("Cancelar") }
+                    }
+                )
+            }
+
             when {
                 isLoading -> {
                     CircularProgressIndicator(modifier = Modifier
@@ -274,7 +317,10 @@ fun SongsScreen(
                                     when (option) {
                                         "Cambiar nombre" -> showEditTitleDialog = true
                                         "Cambiar artista" -> showEditArtistDialog = true
-                                        "Agregar a playlist" -> showSongNameDialog = true
+                                        "Agregar a playlist" -> {
+                                            songToAdd = song
+                                            showPlaylistDialog = true
+                                        }
                                     }
                                 }
                             )
