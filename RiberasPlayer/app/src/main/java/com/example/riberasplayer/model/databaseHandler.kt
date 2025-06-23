@@ -14,7 +14,7 @@ private const val DATABASE_VERSION = 1
 
 // Tabla canciones
 private const val TABLE_SONGS = "songs"
-private const val COL_SONG_ID = "id"
+private const val COL_SONG_ID = "song_id"
 private const val COL_TITLE = "title"
 private const val COL_ARTIST = "artist"
 private const val COL_ALBUM = "album"
@@ -23,12 +23,14 @@ private const val COL_PATH = "path"
 
 // Tabla playlists
 private const val TABLE_PLAYLISTS = "playlists"
-private const val COL_PLAYLIST_ID = "id"
+private const val COL_PLAYLIST_ID = "playlist_id"
 private const val COL_PLAYLIST_NAME = "name"
 private const val COL_CREATED_AT = "created_at"
 
 // Tabla intermedia: canciones por playlist
 private const val TABLE_PLAYLIST_SONGS = "playlist_songs"
+private const val COL_PS_PLAYLIST_ID = "playlist_id"
+private const val COL_PS_SONG_ID = "song_id"
 private const val COL_POSITION = "position"
 
 class MusicDatabaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
@@ -58,12 +60,12 @@ class MusicDatabaseHandler(context: Context) : SQLiteOpenHelper(context, DATABAS
         // Crear tabla intermedia playlist_songs
         val createPlaylistSongsTable = """
             CREATE TABLE $TABLE_PLAYLIST_SONGS (
-                $COL_PLAYLIST_ID INTEGER NOT NULL,
-                $COL_SONG_ID INTEGER NOT NULL,
+                $COL_PS_PLAYLIST_ID INTEGER NOT NULL,
+                $COL_PS_SONG_ID INTEGER NOT NULL,
                 $COL_POSITION INTEGER DEFAULT 0,
-                PRIMARY KEY ($COL_PLAYLIST_ID, $COL_SONG_ID),
-                FOREIGN KEY ($COL_PLAYLIST_ID) REFERENCES $TABLE_PLAYLISTS($COL_PLAYLIST_ID) ON DELETE CASCADE,
-                FOREIGN KEY ($COL_SONG_ID) REFERENCES $TABLE_SONGS($COL_SONG_ID) ON DELETE CASCADE
+                PRIMARY KEY ($COL_PS_PLAYLIST_ID, $COL_PS_SONG_ID),
+                FOREIGN KEY ($COL_PS_PLAYLIST_ID) REFERENCES $TABLE_PLAYLISTS($COL_PLAYLIST_ID) ON DELETE CASCADE,
+                FOREIGN KEY ($COL_PS_SONG_ID) REFERENCES $TABLE_SONGS($COL_SONG_ID) ON DELETE CASCADE
             )
         """.trimIndent()
 
@@ -270,8 +272,8 @@ class MusicDatabaseHandler(context: Context) : SQLiteOpenHelper(context, DATABAS
     fun addSongToPlaylist(playlistId: Int, songId: Int, position: Int = 0): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
-            put(COL_PLAYLIST_ID, playlistId)
-            put(COL_SONG_ID, songId)
+            put(COL_PS_PLAYLIST_ID, playlistId)
+            put(COL_PS_SONG_ID, songId)
             put(COL_POSITION, position)
         }
 
@@ -286,8 +288,8 @@ class MusicDatabaseHandler(context: Context) : SQLiteOpenHelper(context, DATABAS
         val db = this.readableDatabase
         val query = """
             SELECT s.* FROM $TABLE_SONGS s
-            JOIN $TABLE_PLAYLIST_SONGS ps ON s.$COL_SONG_ID = ps.$COL_SONG_ID
-            WHERE ps.$COL_PLAYLIST_ID = ?
+            JOIN $TABLE_PLAYLIST_SONGS ps ON s.$COL_SONG_ID = ps.$COL_PS_SONG_ID
+            WHERE ps.$COL_PS_PLAYLIST_ID = ?
             ORDER BY ps.$COL_POSITION
         """.trimIndent()
 
@@ -315,7 +317,7 @@ class MusicDatabaseHandler(context: Context) : SQLiteOpenHelper(context, DATABAS
         val db = this.writableDatabase
         val rowsDeleted = db.delete(
             TABLE_PLAYLIST_SONGS,
-            "$COL_PLAYLIST_ID = ? AND $COL_SONG_ID = ?",
+            "$COL_PS_PLAYLIST_ID = ? AND $COL_PS_SONG_ID = ?",
             arrayOf(playlistId.toString(), songId.toString())
         )
         db.close()
@@ -331,7 +333,7 @@ class MusicDatabaseHandler(context: Context) : SQLiteOpenHelper(context, DATABAS
         val rowsAffected = db.update(
             TABLE_PLAYLIST_SONGS,
             values,
-            "$COL_PLAYLIST_ID = ? AND $COL_SONG_ID = ?",
+            "$COL_PS_PLAYLIST_ID = ? AND $COL_PS_SONG_ID = ?",
             arrayOf(playlistId.toString(), songId.toString())
         )
         db.close()

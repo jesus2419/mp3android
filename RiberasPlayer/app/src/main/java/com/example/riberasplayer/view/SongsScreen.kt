@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.riberasplayer.R
+import com.example.riberasplayer.model.MusicDatabaseHandler
+import com.example.riberasplayer.model.Song
 import com.example.riberasplayer.viewmodel.PlayerViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
@@ -45,6 +47,7 @@ fun SongsScreen(
     viewModel: PlayerViewModel // Ahora siempre se pasa el viewModel
 ) {
     val context = LocalContext.current
+    val dbHandler = remember { MusicDatabaseHandler(context) }
 
     // Seleccionar el permiso correcto según la versión de Android
     val permission = when {
@@ -54,23 +57,30 @@ fun SongsScreen(
     }
 
     val permissionState = rememberPermissionState(permission = permission)
-    var songs by remember { mutableStateOf<List<SongFile>>(emptyList()) }
+    var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    // Cargar canciones desde archivos y sincronizar con la base de datos
     LaunchedEffect(permissionState.status) {
         if (permissionState.status.isGranted) {
-            loadSongs(context, onSuccess = { loadedSongs ->
-                songs = loadedSongs
-                viewModel.setSongList(loadedSongs) // <-- Agrega esto
-            }, onError = { error ->
-                errorMessage = error
-            })
+            isLoading = true
+            try {
+                // Cambia aquí: ignora el valor de retorno de loadSongsFromFilesAndSyncDB
+                loadSongsFromFilesAndSyncDB(context, dbHandler)
+                songs = dbHandler.getAllSongs()
+                viewModel.setSongListFromDb(songs)
+            } catch (e: Exception) {
+                errorMessage = "Error al cargar canciones: ${e.message ?: "Error desconocido"}"
+            }
+            isLoading = false
         }
     }
 
     // Estado para mostrar el nombre de la canción seleccionada en el menú
-    var selectedSongName by remember { mutableStateOf<String?>(null) }
+    var selectedSong by remember { mutableStateOf<Song?>(null) }
+    var showEditTitleDialog by remember { mutableStateOf(false) }
+    var showEditArtistDialog by remember { mutableStateOf(false) }
     var showSongNameDialog by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -98,7 +108,7 @@ fun SongsScreen(
             )
 
             // Mostrar el nombre de la canción seleccionada si corresponde
-            if (showSongNameDialog && selectedSongName != null) {
+            if (showSongNameDialog && selectedSong != null) {
                 Dialog(onDismissRequest = { showSongNameDialog = false }) {
                     Surface(
                         shape = MaterialTheme.shapes.medium,
@@ -115,13 +125,93 @@ fun SongsScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = selectedSongName ?: "",
+                                text = selectedSong?.title ?: "",
                                 style = MaterialTheme.typography.bodyLarge,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(onClick = { showSongNameDialog = false }) {
                                 Text("Cerrar")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Diálogo para editar nombre de la canción
+            if (showEditTitleDialog && selectedSong != null) {
+                var newTitle by remember { mutableStateOf(selectedSong!!.title) }
+                Dialog(onDismissRequest = { showEditTitleDialog = false }) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        tonalElevation = 8.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Editar nombre de la canción", style = MaterialTheme.typography.titleMedium)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = newTitle,
+                                onValueChange = { newTitle = it },
+                                label = { Text("Nombre de la canción") }
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row {
+                                Button(onClick = {
+                                    showEditTitleDialog = false
+                                }) { Text("Cancelar") }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(onClick = {
+                                    selectedSong?.let {
+                                        val updated = it.copy(title = newTitle)
+                                        dbHandler.updateSong(updated)
+                                        songs = dbHandler.getAllSongs()
+                                        viewModel.setSongListFromDb(songs)
+                                    }
+                                    showEditTitleDialog = false
+                                }) { Text("Guardar") }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Diálogo para editar artista
+            if (showEditArtistDialog && selectedSong != null) {
+                var newArtist by remember { mutableStateOf(selectedSong!!.artist ?: "") }
+                Dialog(onDismissRequest = { showEditArtistDialog = false }) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        tonalElevation = 8.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Editar artista", style = MaterialTheme.typography.titleMedium)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = newArtist,
+                                onValueChange = { newArtist = it },
+                                label = { Text("Artista") }
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row {
+                                Button(onClick = {
+                                    showEditArtistDialog = false
+                                }) { Text("Cancelar") }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(onClick = {
+                                    selectedSong?.let {
+                                        val updated = it.copy(artist = newArtist)
+                                        dbHandler.updateSong(updated)
+                                        songs = dbHandler.getAllSongs()
+                                        viewModel.setSongListFromDb(songs)
+                                    }
+                                    showEditArtistDialog = false
+                                }) { Text("Guardar") }
                             }
                         }
                     }
@@ -147,11 +237,10 @@ fun SongsScreen(
                         Button(onClick = {
                             errorMessage = null
                             if (permissionState.status.isGranted) {
-                                loadSongs(context, onSuccess = { loadedSongs ->
-                                    songs = loadedSongs
-                            }, onError = { error ->
-                                errorMessage = error
-                            })
+                                // Solución: recarga desde archivos y sincroniza con la base de datos
+                                loadSongsFromFilesAndSyncDB(context, dbHandler)
+                                songs = dbHandler.getAllSongs()
+                                viewModel.setSongListFromDb(songs)
                             }
                         }) {
                             Text("Reintentar")
@@ -174,16 +263,19 @@ fun SongsScreen(
                             .weight(1f)
                     ) {
                         items(songs) { song ->
-                            SongFileItem(
+                            SongDbItem(
                                 song = song,
                                 onClick = {
-                                    viewModel.setSongList(songs) // <-- Asegura la lista actual
-                                    viewModel.playSong(song)
-                                    //onSongSelected(song) // Opcional: navegación si es necesaria
+                                    viewModel.setSongListFromDb(songs)
+                                    viewModel.playSongFromDb(song)
                                 },
-                                onOptionsClick = {
-                                    selectedSongName = song.title
-                                    showSongNameDialog = true
+                                onOptionsClick = { option ->
+                                    selectedSong = song
+                                    when (option) {
+                                        "Cambiar nombre" -> showEditTitleDialog = true
+                                        "Cambiar artista" -> showEditArtistDialog = true
+                                        "Agregar a playlist" -> showSongNameDialog = true
+                                    }
                                 }
                             )
                         }
@@ -390,13 +482,12 @@ fun PermissionRequest(
 }
 
 @Composable
-fun SongFileItem(
-    song: SongFile,
+fun SongDbItem(
+    song: Song,
     onClick: () -> Unit,
-    onOptionsClick: () -> Unit
+    onOptionsClick: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -419,7 +510,7 @@ fun SongFileItem(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${song.artist} • ${song.duration}",
+                    text = "${song.artist ?: "Artista desconocido"} • ${formatDuration(song.duration)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -439,25 +530,62 @@ fun SongFileItem(
                         text = { Text("Cambiar nombre") },
                         onClick = {
                             expanded = false
-                            onOptionsClick()
+                            onOptionsClick("Cambiar nombre")
                         }
                     )
                     DropdownMenuItem(
                         text = { Text("Cambiar artista") },
                         onClick = {
                             expanded = false
-                            onOptionsClick()
+                            onOptionsClick("Cambiar artista")
                         }
                     )
                     DropdownMenuItem(
                         text = { Text("Agregar a playlist") },
                         onClick = {
                             expanded = false
-                            onOptionsClick()
+                            onOptionsClick("Agregar a playlist")
                         }
                     )
                 }
             }
         }
     }
+}
+
+// Sincroniza archivos con la base de datos y retorna la lista de Song
+private fun loadSongsFromFilesAndSyncDB(context: Context, dbHandler: MusicDatabaseHandler): List<Song> {
+    val files = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        loadAudioFilesWithMediaStore(context)
+    } else {
+        loadAudioFilesLegacy(context)
+    }
+    // Insertar en la base de datos si no existen
+    files.forEach { file ->
+        val exists = dbHandler.getAllSongs().any { it.path == file.file.absolutePath }
+        if (!exists) {
+            dbHandler.addSong(
+                Song(
+                    title = file.title,
+                    artist = file.artist,
+                    album = null,
+                    duration = parseDuration(file.duration),
+                    path = file.file.absolutePath
+                )
+            )
+        }
+    }
+    return dbHandler.getAllSongs()
+}
+
+// Convierte "mm:ss" a milisegundos
+private fun parseDuration(duration: String): Long {
+    return try {
+        val parts = duration.split(":")
+        if (parts.size == 2) {
+            val min = parts[0].toLong()
+            val sec = parts[1].toLong()
+            (min * 60 + sec) * 1000
+        } else 0L
+    } catch (_: Exception) { 0L }
 }

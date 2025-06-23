@@ -11,10 +11,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.riberasplayer.R
 import com.example.riberasplayer.view.SongFile
+import com.example.riberasplayer.model.Song
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.io.File as JavaFile
+import org.json.JSONArray
+import org.json.JSONObject
 
 // --- BroadcastReceiver para acciones de notificación ---
 import android.content.BroadcastReceiver
@@ -38,12 +42,37 @@ open class PlayerViewModel : ViewModel() {
     private var songList: List<SongFile> = emptyList()
     private var currentIndex: Int = -1
 
+    // Para trabajar con Song (de la base de datos)
+    private var songDbList: List<Song> = emptyList()
+    private var currentDbIndex: Int = -1
+
     val currentSong: StateFlow<SongFile?> = _currentSong
     val isPlaying: StateFlow<Boolean> = _isPlaying
 
+    // Mapa para persistencia: ruta del archivo -> (título, artista)
+    private var songInfoOverrides: MutableMap<String, Pair<String, String>> = mutableMapOf()
+    private val SONG_INFO_FILE = "song_info_overrides.json"
+
     // Llama esto antes de reproducir para actualizar la lista de canciones
     fun setSongList(songs: List<SongFile>) {
-        songList = songs
+        songList = songs.map { song ->
+            val override = songInfoOverrides[song.file.path]
+            if (override != null) song.copy(title = override.first, artist = override.second) else song
+        }
+    }
+
+    fun updateSongInfo(song: SongFile, newTitle: String, newArtist: String) {
+        // Actualiza el mapa de overrides
+        songInfoOverrides[song.file.path] = newTitle to newArtist
+        saveSongInfoOverrides()
+        // Actualiza la lista interna
+        songList = songList.map {
+            if (it.file == song.file) it.copy(title = newTitle, artist = newArtist) else it
+        }
+        // Si la canción actual es la editada, actualiza el estado
+        if (_currentSong.value?.file == song.file) {
+            _currentSong.value = _currentSong.value?.copy(title = newTitle, artist = newArtist)
+        }
     }
 
     fun playSong(song: SongFile) {
@@ -58,6 +87,42 @@ open class PlayerViewModel : ViewModel() {
                     prepareAsync()
                     setOnPreparedListener {
                         _currentSong.value = song
+                        _isPlaying.value = true
+                        start()
+                        _durationMs.value = duration
+                        startProgressUpdates()
+                    }
+                    setOnCompletionListener {
+                        _isPlaying.value = false
+                        stopProgressUpdates()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PlayerViewModel", "Error al reproducir canción", e)
+            }
+        }
+    }
+
+    // Para trabajar con Song (de la base de datos)
+    fun setSongListFromDb(songs: List<Song>) {
+        songDbList = songs
+    }
+
+    fun playSongFromDb(song: Song) {
+        currentDbIndex = songDbList.indexOfFirst { it.path == song.path }
+        viewModelScope.launch {
+            try {
+                mediaPlayer?.release()
+                mediaPlayer = MediaPlayer().apply {
+                    setDataSource(song.path)
+                    prepareAsync()
+                    setOnPreparedListener {
+                        _currentSong.value = SongFile(
+                            file = JavaFile(song.path),
+                            title = song.title,
+                            artist = song.artist ?: "Artista desconocido",
+                            duration = formatDuration(song.duration)
+                        )
                         _isPlaying.value = true
                         start()
                         _durationMs.value = duration
@@ -145,6 +210,7 @@ open class PlayerViewModel : ViewModel() {
         this.context = context.applicationContext
         notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
+        loadSongInfoOverrides()
     }
 
     private fun createNotificationChannel() {
@@ -255,6 +321,51 @@ open class PlayerViewModel : ViewModel() {
         mediaPlayer?.release()
         stopProgressUpdates()
         cancelNotification()
+        saveSongInfoOverrides()
+    }
+
+    // --- Persistencia de cambios de título/artista ---
+    private fun loadSongInfoOverrides() {
+        context?.let { ctx ->
+            try {
+                val file = JavaFile(ctx.filesDir, SONG_INFO_FILE)
+                if (file.exists()) {
+                    val json = file.readText()
+                    val arr = JSONArray(json)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        val path = obj.getString("path")
+                        val title = obj.getString("title")
+                        val artist = obj.getString("artist")
+                        songInfoOverrides[path] = title to artist
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun saveSongInfoOverrides() {
+        context?.let { ctx ->
+            try {
+                val arr = JSONArray()
+                songInfoOverrides.forEach { (path, pair) ->
+                    val obj = JSONObject()
+                    obj.put("path", path)
+                    obj.put("title", pair.first)
+                    obj.put("artist", pair.second)
+                    arr.put(obj)
+                }
+                val file = JavaFile(ctx.filesDir, SONG_INFO_FILE)
+                file.writeText(arr.toString())
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Utilidad para formatear duración en ms a mm:ss
+    private fun formatDuration(millis: Long): String {
+        val seconds = (millis / 1000) % 60
+        val minutes = (millis / (1000 * 60)) % 60
+        return String.format("%02d:%02d", minutes, seconds)
     }
 }
 
